@@ -28,6 +28,8 @@ public class UpdateDB {
         System.out.println("Realm.class is entity? " + HibernateUtil.getSessionFactory().getMetamodel().entity(entity.Realm.class));
 
         alimRealms();
+
+        System.out.println("test");
     }
 
     public String getAccessToken(){
