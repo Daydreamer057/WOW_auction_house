@@ -3,6 +3,8 @@ package dao;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dao.service.CurrencyService;
+import dao.service.ItemService;
 import dao.service.RealmService;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -12,9 +14,8 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.context.annotation.ComponentScan;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -25,18 +26,22 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 
-@Configuration
-@ComponentScan(basePackages = "dao")  // scans services, repositories, etc.
+@Component
 public class UpdateDB {
     String token = getAccessToken();
 
-    private static AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(UpdateDB.class);
-    private static RealmService realmService = context.getBean(RealmService.class);
+    private final RealmService realmService;
+    private final ItemService itemService;
+    private final CurrencyService currencyService;
 
-    public UpdateDB() {
+    @Autowired
+    public UpdateDB(RealmService realmService, ItemService itemService, CurrencyService currencyService) {
+        this.realmService = realmService;
+        this.itemService = itemService;
+        this.currencyService = currencyService;
+
         System.out.println("Starting UpdateDB");
         alimRealms();
-        context.close();
     }
 
     public String getAccessToken(){
@@ -161,10 +166,6 @@ public class UpdateDB {
             ex.printStackTrace();
         }
         return new HashSet<>();
-    }
-
-    public static void main(String[] args) {
-        UpdateDB updateDB = new UpdateDB();
     }
 
     //=================================================================================================================================================
