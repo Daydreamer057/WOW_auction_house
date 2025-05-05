@@ -1,6 +1,7 @@
-package entity;
+package dao.entity;
 
-import javax.persistence.*;
+
+import jakarta.persistence.*;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -24,7 +25,7 @@ public class Currency implements Serializable {
     @JoinColumn(name = "realm_id", nullable = false)
     private Realm realm;
 
-    @Column(precision = 20, scale = 4)
+    @Column(name="cost", precision = 20, scale = 4)
     private BigDecimal cost;
 
     // Getters and setters
@@ -36,4 +37,9 @@ public class Currency implements Serializable {
 
     public BigDecimal getCost() { return cost; }
     public void setCost(BigDecimal cost) { this.cost = cost; }
+
+    public Currency orElse(Object o) {
+        if(o==null) return null;
+        return (Currency) o;
+    }
 }

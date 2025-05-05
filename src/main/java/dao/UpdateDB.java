@@ -1,7 +1,9 @@
+package dao;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dao.RealmDAO;
+import dao.service.RealmService;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -10,7 +12,9 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
-import util.HibernateUtil;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -21,15 +25,18 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 
+@Configuration
+@ComponentScan(basePackages = "dao")  // scans services, repositories, etc.
 public class UpdateDB {
     String token = getAccessToken();
 
+    private static AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(UpdateDB.class);
+    private static RealmService realmService = context.getBean(RealmService.class);
+
     public UpdateDB() {
-        System.out.println("Realm.class is entity? " + HibernateUtil.getSessionFactory().getMetamodel().entity(entity.Realm.class));
-
+        System.out.println("Starting UpdateDB");
         alimRealms();
-
-        System.out.println("test");
+        context.close();
     }
 
     public String getAccessToken(){
@@ -76,11 +83,11 @@ public class UpdateDB {
                 HashSet<Realm> realms = getListRealms(result);
 
                 for(Realm realm : realms) {
-                    entity.Realm realmEntity = new entity.Realm();
+                    dao.entity.Realm realmEntity = new dao.entity.Realm();
                     realmEntity.setId(realm.id);
                     realmEntity.setName(realm.name);
-                    RealmDAO realmDAO = new RealmDAO();
-                    realmDAO.save(realmEntity);
+
+                    realmService.save(realmEntity);
                 }
 
             } catch (Exception ex){
@@ -407,6 +414,4 @@ public class UpdateDB {
             this.listItems = listItems;
         }
     }
-
-
 }

@@ -1,7 +1,12 @@
-package entity;
+package dao.entity;
 
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.CascadeType;
 
-import javax.persistence.*;
 import java.io.Serial;
 import java.io.Serializable;
 import java.util.Set;
@@ -16,6 +21,7 @@ public class Item implements Serializable {
     @Id
     private int id;
 
+    @Column(name = "name")
     private String name;
 
     @OneToMany(mappedBy = "item", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -30,4 +36,9 @@ public class Item implements Serializable {
 
     public Set<Currency> getCurrencies() { return currencies; }
     public void setCurrencies(Set<Currency> currencies) { this.currencies = currencies; }
+
+    public Item orElse(Object o) {
+        if(o==null) return null;
+        return (Item) o;
+    }
 }
