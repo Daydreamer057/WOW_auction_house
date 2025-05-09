@@ -1,7 +1,7 @@
-package dao.repository;
+package repository;
 
-import dao.entity.Currency;
-import dao.entity.CurrencyId;
+import entity.Currency;
+import entity.CurrencyId;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

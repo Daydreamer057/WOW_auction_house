@@ -1,8 +1,8 @@
-package dao.service;
+package service;
 
-import dao.entity.Currency;
-import dao.entity.CurrencyId;
-import dao.repository.CurrencyRepository;
+import entity.Currency;
+import entity.CurrencyId;
+import repository.CurrencyRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 

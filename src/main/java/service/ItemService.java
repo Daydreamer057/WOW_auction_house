@@ -1,7 +1,7 @@
-package dao.service;
+package service;
 
-import dao.entity.Item;
-import dao.repository.ItemRepository;
+import entity.Item;
+import repository.ItemRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +23,10 @@ public class ItemService {
 
     public Item getById(int id) {
         return itemRepository.findById(id).orElse(null);
+    }
+
+    public Item getByName(String name) {
+        return itemRepository.findByName(name).orElse(null);
     }
 
     public void delete(Item item) {

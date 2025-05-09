@@ -1,7 +1,7 @@
-package dao.service;
+package service;
 
-import dao.entity.Realm;
-import dao.repository.RealmRepository;
+import entity.Realm;
+import repository.RealmRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 

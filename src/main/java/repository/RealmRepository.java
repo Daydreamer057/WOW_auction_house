@@ -1,6 +1,6 @@
-package dao.repository;
+package repository;
 
-import dao.entity.Realm;
+import entity.Realm;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

@@ -1,4 +1,4 @@
-package dao.entity;
+package entity;
 
 
 import jakarta.persistence.Column;

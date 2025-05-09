@@ -1,4 +1,4 @@
-package dao;
+package application;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -7,14 +7,14 @@ import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.context.ApplicationContext;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
-@SpringBootApplication(scanBasePackages = {"dao"})
-@EnableJpaRepositories("dao.repository")
-@EntityScan("dao/entity")
+@SpringBootApplication(scanBasePackages = {"application", "service", "repository", "entity"})
+@EnableJpaRepositories("repository")
+@EntityScan("entity")
 public class WowAuctionHouseApp implements CommandLineRunner {
 
     public static void main(String[] args) {
         ApplicationContext context = SpringApplication.run(WowAuctionHouseApp.class, args);
-        // Get the UpdateDB bean from context so Spring can inject RealmService
+        // Get the application.UpdateDB bean from context so Spring can inject RealmService
         context.getBean(UpdateDB.class);
     }
 
