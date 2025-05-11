@@ -18,6 +18,13 @@ public class CurrencyService {
         return currencyRepository.save(currency);
     }
 
+    public Currency update(Currency currency) {
+        if (currencyRepository.existsById(currency.getId())) {
+            return currencyRepository.save(currency); // ✅ this performs update
+        }
+        throw new RuntimeException("Currency with ID " + currency.getId() + " does not exist.");
+    }
+
     public List<Currency> getAll() {
         return currencyRepository.findAll();
     }
@@ -29,4 +36,5 @@ public class CurrencyService {
     public void delete(Currency currency) {
         currencyRepository.delete(currency);
     }
+
 }

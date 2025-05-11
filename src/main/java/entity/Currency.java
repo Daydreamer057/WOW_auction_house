@@ -1,34 +1,30 @@
 package entity;
 
-
 import jakarta.persistence.*;
-
-import java.io.Serial;
-import java.io.Serializable;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "currency")
-@IdClass(CurrencyId.class)
-public class Currency implements Serializable {
+public class Currency {
 
-    @Serial
-    private static final long serialVersionUID = 1L;
+    @EmbeddedId
+    private CurrencyId id;
 
-    @Id
     @ManyToOne
-    @JoinColumn(name = "item_id", nullable = false)
+    @MapsId("itemId")
+    @JoinColumn(name = "item_id")
     private Item item;
 
-    @Id
     @ManyToOne
-    @JoinColumn(name = "realm_id", nullable = false)
+    @MapsId("realmId")
+    @JoinColumn(name = "realm_id")
     private Realm realm;
 
-    @Column(name="cost", precision = 20, scale = 4)
     private BigDecimal cost;
 
-    // Getters and setters
+    // Getters and Setters
+    public CurrencyId getId() { return id; }
+    public void setId(CurrencyId id) { this.id = id; }
+
     public Item getItem() { return item; }
     public void setItem(Item item) { this.item = item; }
 
@@ -37,9 +33,4 @@ public class Currency implements Serializable {
 
     public BigDecimal getCost() { return cost; }
     public void setCost(BigDecimal cost) { this.cost = cost; }
-
-    public Currency orElse(Object o) {
-        if(o==null) return null;
-        return (Currency) o;
-    }
 }

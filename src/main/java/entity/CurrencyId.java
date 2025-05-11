@@ -1,31 +1,39 @@
 package entity;
 
+import jakarta.persistence.Embeddable;
 import java.io.Serializable;
 import java.util.Objects;
 
+@Embeddable
 public class CurrencyId implements Serializable {
 
-    private int item;
-    private int realm;
+    private int itemId;
+    private int realmId;
 
     public CurrencyId() {}
 
-    public CurrencyId(int item, int realm) {
-        this.item = item;
-        this.realm = realm;
+    public CurrencyId(int itemId, int realmId) {
+        this.itemId = itemId;
+        this.realmId = realmId;
     }
 
-    // hashCode and equals
+    // Getters & Setters (required for Hibernate)
+    public int getItemId() { return itemId; }
+    public void setItemId(int itemId) { this.itemId = itemId; }
+
+    public int getRealmId() { return realmId; }
+    public void setRealmId(int realmId) { this.realmId = realmId; }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof CurrencyId)) return false;
         CurrencyId that = (CurrencyId) o;
-        return item == that.item && realm == that.realm;
+        return itemId == that.itemId && realmId == that.realmId;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(item, realm);
+        return Objects.hash(itemId, realmId);
     }
 }

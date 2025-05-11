@@ -1,9 +1,8 @@
 package application;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import entity.BattlePet;
+import entity.*;
 import jakarta.annotation.PostConstruct;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -18,6 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import service.*;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -55,7 +55,7 @@ public class UpdateDB {
     public void init() {
         System.out.println("Starting application.UpdateDB...");
         this.token = getAccessToken(); // Retrieve access token when Spring initializes the bean
-        getAllBattlePets();
+
     }
 
     // Gets the access token from Blizzard's OAuth service
@@ -85,261 +85,133 @@ public class UpdateDB {
         return "";
     }
 
-    public void getAllBattlePets() {
-        String url = "https://eu.api.blizzard.com/data/wow/pet/index?namespace=static-eu&locale=en_GB&access_token=" + token;
+    public void getMountPrice(){
+        List<Mount> mountList = mountService.getAll();
+        List<entity.Realm> realmList = realmService.getAll();
 
-        try {
-            CloseableHttpClient httpClient = HttpClients.createDefault();
-            HttpGet request = new HttpGet(url);
-            request.setHeader("Authorization", "Bearer " + token);
+        for(Mount mountTemp : mountList){
+            for(entity.Realm realmTemp : realmList) {
+                String url = "https://eu.api.blizzard.com/data/wow/connected-realm/"+realmTemp.getId()+"/auctions?namespace=dynamic-eu&locale=en_GB&access_token=" + token;
 
-            CloseableHttpResponse response = httpClient.execute(request);
-            System.out.println(response.getStatusLine().getStatusCode());
+                try {
+                    CloseableHttpClient httpClient = HttpClients.createDefault();
+                    HttpGet request = new HttpGet(url);
+                    request.setHeader("Authorization", "Bearer " + token);
 
-            if (response.getStatusLine().getStatusCode() != 404) {
-                String result = EntityUtils.toString(response.getEntity());
+                    CloseableHttpResponse response = httpClient.execute(request);
+                    System.out.println(response.getStatusLine().getStatusCode());
 
-                if (result != null && !result.isEmpty()) {
-                    ObjectMapper objectMapper = new ObjectMapper();
-                    objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                    if (response.getStatusLine().getStatusCode() != 404) {
+                        String result = EntityUtils.toString(response.getEntity());
 
-                    Pets pets = objectMapper.readValue(result, Pets.class);
+                        if (result != null && !result.isEmpty()) {
+                            ObjectMapper objectMapper = new ObjectMapper();
+                            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-                    // Loop through each mount
-                    for (Pet petTemp : pets.pets) {
-                        // Try to find items that contain the mount name
-                        List<entity.Item> items = itemService.getByNameContaining(petTemp.name.toLowerCase());
-
-                        if (items != null && items.size() > 0) {
-                            // If we haven't already saved this mount, do it
-                            entity.BattlePet existing = battlePetService.getById(items.get(0).getId());
-                            if (existing == null) {
-                                BattlePet battlePet = new BattlePet();
-                                battlePet.setId(items.get(0).getId());
-                                battlePet.setName(petTemp.name);
-                                battlePetService.save(battlePet);
+                            Auctions auctions = objectMapper.readValue(result, Auctions.class);
+                            long minPrice = 999999999999999999L;
+                            int id = 0;
+                            for(Auction auctionTemp : auctions.auctions){
+                                if(auctionTemp.buyout < minPrice){
+                                    minPrice = auctionTemp.buyout;
+                                    id = auctionTemp.id;
+                                }
                             }
+
+                            CurrencyId currencyId = new CurrencyId(mountTemp.getId(),realmTemp.getId());
+                            Currency currency = currencyService.getById(currencyId);
+
+                            if(currency == null) {
+                                currency.setCost(BigDecimal.valueOf(minPrice));
+                                currency.setItem(itemService.getById(mountTemp.getId()));
+                                currency.setRealm(realmTemp);
+                                currency.setId(currencyId);
+                            } else {
+                                currency.setCost(BigDecimal.valueOf(minPrice));
+                            }
+
+                            currencyService.save(currency);
                         }
                     }
-                } else {
-                    System.out.println("Mounts not found");
+                } catch (Exception ex) {
+                    ex.printStackTrace();
                 }
-            } else {
-                System.out.println("Error 404");
             }
-        } catch (Exception ex) {
-            ex.printStackTrace();
         }
+
     }
 
-
-
-
-    //=================================================================================================================================================
-    // Items
-// import com.fasterxml.jackson.databind.ObjectMapper; // version 2.11.1
+    // import com.fasterxml.jackson.databind.ObjectMapper; // version 2.11.1
 // import com.fasterxml.jackson.annotation.JsonProperty; // version 2.11.1
 /* ObjectMapper om = new ObjectMapper();
 Root root = om.readValue(myJsonString, Root.class); */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Appearance{
-        public Key key;
+    public static class Auction{
         public int id;
+        public Item item;
+        public int buyout;
+        public int quantity;
+        public String time_left;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class AttackSpeed{
-        public int value;
-        public String display_string;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Binding{
-        public String type;
-        public String name;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Damage{
-        public int min_value;
-        public int max_value;
-        public String display_string;
-        public DamageClass damage_class;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class DamageClass{
-        public String type;
-        public String name;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class DisplayStrings{
-        public String header;
-        public String gold;
-        public String silver;
-        public String copper;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Dps{
-        public double value;
-        public String display_string;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Durability{
-        public int value;
-        public String display_string;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class InventoryType{
-        public String type;
-        public String name;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Item{
-        public Key key;
-        public int id;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ItemClass{
-        public Key key;
-        public String name;
-        public int id;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ItemSubclass{
-        public Key key;
-        public String name;
-        public int id;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Key{
+    public static class Commodities{
         public String href;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Level{
-        public int value;
-        public String display_string;
+    public static class ConnectedRealm{
+        public String href;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Item{
+        public int id;
+        public ArrayList<Integer> bonus_lists;
+        public ArrayList<Modifier> modifiers;
+        public int context;
+        public int pet_breed_id;
+        public int pet_level;
+        public int pet_quality_id;
+        public int pet_species_id;
+    }
+
     public static class Links{
         public Self self;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Media{
-        public Key key;
-        public int id;
+    public static class Modifier{
+        public int type;
+        public int value;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class PreviewItem{
-        public Item item;
-        public Quality quality;
-        public String name;
-        public Media media;
-        public ItemClass item_class;
-        public ItemSubclass item_subclass;
-        public InventoryType inventory_type;
-        public Binding binding;
-        public Weapon weapon;
-        public SellPrice sell_price;
-        public Level level;
-        public Durability durability;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Quality{
-        public String type;
-        public String name;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ItemMain{
+    public static class Auctions{
         public Links _links;
-        public int id;
-        public String name;
-        public Quality quality;
-        public int level;
-        public int required_level;
-        public Media media;
-        public ItemClass item_class;
-        public ItemSubclass item_subclass;
-        public InventoryType inventory_type;
-        public int purchase_price;
-        public int sell_price;
-        public int max_count;
-        public boolean is_equippable;
-        public boolean is_stackable;
-        public PreviewItem preview_item;
-        public int purchase_quantity;
-        public ArrayList<Appearance> appearances;
+        public ConnectedRealm connected_realm;
+        public ArrayList<Auction> auctions;
+        public Commodities commodities;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Self{
         public String href;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class SellPrice{
-        public int value;
-        public DisplayStrings display_strings;
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Weapon{
-        public Damage damage;
-        public AttackSpeed attack_speed;
-        public Dps dps;
-    }
-
-    //=================================================================================================================================
-    // mounts
+    //==================================================================================================================================================
+    // Realms
 
     // import com.fasterxml.jackson.databind.ObjectMapper; // version 2.11.1
 // import com.fasterxml.jackson.annotation.JsonProperty; // version 2.11.1
 /* ObjectMapper om = new ObjectMapper();
 Root root = om.readValue(myJsonString, Root.class); */
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Mount{
+    public static class Realm{
         public Key key;
         public String name;
         public int id;
+        public String slug;
     }
 
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class Mounts{
+    public static class Realms{
         public Links _links;
-        public ArrayList<Mount> mounts;
+        public ArrayList<Realm> realms;
     }
 
-    //===================================================================================================================================
-    // Battle Pets
-
-    // import com.fasterxml.jackson.databind.ObjectMapper; // version 2.11.1
-// import com.fasterxml.jackson.annotation.JsonProperty; // version 2.11.1
-/* ObjectMapper om = new ObjectMapper();
-Root root = om.readValue(myJsonString, Root.class); */
-
-
-    public static class Pet{
-        public Key key;
-        public String name;
-        public int id;
-    }
-
-    public static class Pets{
-        public Links _links;
-        public ArrayList<Pet> pets;
+    public static class Key{
+        public String href;
     }
 }
