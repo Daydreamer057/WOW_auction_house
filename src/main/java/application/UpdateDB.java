@@ -22,6 +22,7 @@ import service.RealmService;
 
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 
 @Component
 public class UpdateDB {
@@ -50,7 +51,7 @@ public class UpdateDB {
     public void init() {
         System.out.println("Starting application.UpdateDB...");
         this.token = getAccessToken();
-        getAllItem();
+
     }
 
     public String getAccessToken(){
@@ -83,61 +84,7 @@ public class UpdateDB {
         return "";
     }
 
-    public void getAllItem() {
-        int i = 27948;
-        int empty = 0;
-        while(true) {
-            System.out.println("I " + i);
-
-//            String auctionUrl = "https://eu.api.blizzard.com/data/wow/search/item?namespace=static-eu&name.en_GB=&orderby=id&_pageSize=1000&id=[" + ((1000 * i) + 1) + "]&_page=1&access_token=" + token;
-            String auctionUrl = "https://eu.api.blizzard.com/data/wow/item/"+i+"?namespace=static-eu&locale=en_GB&access_token=" + token;
-
-            try {
-                CloseableHttpClient httpClient = HttpClients.createDefault();
-                HttpGet request = new HttpGet(auctionUrl);
-                request.setHeader("Authorization", "Bearer " + token);
-                CloseableHttpResponse response = httpClient.execute(request);
-                System.out.println(response.getStatusLine().getStatusCode());
-                if (response.getStatusLine().getStatusCode() != 404) {
-                    String result = EntityUtils.toString(response.getEntity());
-
-                    if (result != null || !result.isEmpty()) {
-                        ObjectMapper objectMapper = new ObjectMapper();
-                        objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
-                        ItemMain root = objectMapper.readValue(result, ItemMain.class);
-
-                        entity.Item item = new entity.Item();
-
-                        item.setId(root.id);
-                        item.setName(root.name);
-
-                        itemService.save(item);
-
-                        empty = 0;
-
-                    } else {
-                        System.out.println("No Further items found");
-                    }
-                } else {
-                    System.out.println("No items found");
-                    empty++;
-//                    if(empty > 1000) {
-//                        System.exit(0);
-//                    }
-                }
-                Thread.sleep(200);
-                i++;
-                if(i>200000){
-                    System.exit(0);
-                }
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
-        }
-    }
-
-    public void getAllMounts(){
+    public void getAllBattlePets(){
         String auctionUrl = "https://eu.api.blizzard.com/data/wow/mount/index?namespace=static-eu&locale=en_GB&access_token=" + token;
 
         try {
@@ -156,14 +103,20 @@ public class UpdateDB {
                     Mounts mounts = objectMapper.readValue(result, Mounts.class);
 
                     for(Mount mountTemp : mounts.mounts) {
-                        entity.Item item = itemService.getByName(mountTemp.name);
+                        List<entity.Item> items = itemService.getByNameContaining(mountTemp.name.toLowerCase());
 
-                        entity.Mount mount = new entity.Mount();
+                        if(items != null && items.size() > 0) {
+                            entity.Mount mountTest = mountService.getById(items.get(0).getId());
+                            if (mountTest == null) {
 
-                        mount.setId(item.getId());
-                        mount.setName(mountTemp.name);
+                                entity.Mount mount = new entity.Mount();
 
-                        mountService.save(mount);
+                                mount.setId(items.get(0).getId());
+                                mount.setName(mountTemp.name);
+
+                                mountService.save(mount);
+                            }
+                        }
                     }
                 } else {
                     System.out.println("Mounts not found");
@@ -175,6 +128,8 @@ public class UpdateDB {
             ex.printStackTrace();
         }
     }
+
+
 
     //=================================================================================================================================================
     // Items

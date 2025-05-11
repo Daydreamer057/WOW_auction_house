@@ -1,9 +1,9 @@
 package service;
 
 import entity.Item;
-import repository.ItemRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import repository.ItemRepository;
 
 import java.util.List;
 
@@ -26,7 +26,11 @@ public class ItemService {
     }
 
     public Item getByName(String name) {
-        return itemRepository.findByName(name).orElse(null);
+        return itemRepository.findByNameIgnoreCase(name).orElse(null);
+    }
+
+    public List<Item> getByNameContaining(String name) {
+        return itemRepository.findByNameContainingIgnoreCase(name);
     }
 
     public void delete(Item item) {

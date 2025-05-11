@@ -9,5 +9,4 @@ import java.util.List;
 @Repository
 public interface MountRepository extends JpaRepository<Mount, Integer> {
     List<Mount> findAll();       // Get all realms
-    Mount findById(int id);      // Get realm by ID
 }

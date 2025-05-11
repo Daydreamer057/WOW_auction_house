@@ -9,5 +9,4 @@ import java.util.List;
 @Repository
 public interface RealmRepository extends JpaRepository<Realm, Integer> {
     List<Realm> findAll();       // Get all realms
-    Realm findById(int id);      // Get realm by ID
 }

@@ -9,5 +9,4 @@ import java.util.List;
 @Repository
 public interface BattlePetRepository extends JpaRepository<BattlePet, Integer> {
     List<BattlePet> findAll();       // Get all realms
-    BattlePet findById(int id);      // Get realm by ID
 }
