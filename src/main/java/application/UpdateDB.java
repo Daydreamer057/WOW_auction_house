@@ -3,6 +3,7 @@ package application;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import entity.BattlePet;
 import jakarta.annotation.PostConstruct;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -15,67 +16,67 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import service.CurrencyService;
-import service.ItemService;
-import service.MountService;
-import service.RealmService;
+import service.*;
 
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
-@Component
+@Component // Marks this class as a Spring-managed component
 public class UpdateDB {
+
+    // Injects mountService
     private final MountService mountService;
+    private final BattlePetService battlePetService;
+
     @Value("${CLIENT_ID}")
-    private String clientId;
+    private String clientId; // OAuth client ID
 
     @Value("${CLIENT_SECRET}")
-    private String clientSecret;
+    private String clientSecret; // OAuth client secret
 
-    String token = "";
+    String token = ""; // Stores OAuth token
 
+    // Services injected via constructor
     private final RealmService realmService;
     private final ItemService itemService;
     private final CurrencyService currencyService;
 
     @Autowired
-    public UpdateDB(RealmService realmService, ItemService itemService, CurrencyService currencyService, MountService mountService) {
+    public UpdateDB(RealmService realmService, ItemService itemService, CurrencyService currencyService, MountService mountService, BattlePetService battlePetService) {
         this.realmService = realmService;
         this.itemService = itemService;
         this.currencyService = currencyService;
         this.mountService = mountService;
+        this.battlePetService = battlePetService;
     }
 
     @PostConstruct
     public void init() {
         System.out.println("Starting application.UpdateDB...");
-        this.token = getAccessToken();
-
+        this.token = getAccessToken(); // Retrieve access token when Spring initializes the bean
+        getAllBattlePets();
     }
 
-    public String getAccessToken(){
+    // Gets the access token from Blizzard's OAuth service
+    public String getAccessToken() {
         String TOKEN_URL = "https://eu.battle.net/oauth/token";
 
         try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
             HttpPost post = new HttpPost(TOKEN_URL);
 
-            // Base64 encode the client_id and client_secret
+            // Set Authorization header with base64 encoded clientId:clientSecret
             String auth = clientId + ":" + clientSecret;
             String encodedAuth = Base64.getEncoder().encodeToString(auth.getBytes());
             post.setHeader("Authorization", "Basic " + encodedAuth);
             post.setHeader("Content-Type", "application/x-www-form-urlencoded");
 
-            StringEntity entity = new StringEntity("grant_type=client_credentials");
-            post.setEntity(entity);
+            // Set body content to get client credentials token
+            post.setEntity(new StringEntity("grant_type=client_credentials"));
 
             try (CloseableHttpResponse response = httpClient.execute(post)) {
                 String result = EntityUtils.toString(response.getEntity());
-
-                httpClient.close();
-
                 JSONObject jsonObject = new JSONObject(result);
-
                 return jsonObject.getString("access_token");
             }
         } catch (Exception e) {
@@ -84,37 +85,39 @@ public class UpdateDB {
         return "";
     }
 
-    public void getAllBattlePets(){
-        String auctionUrl = "https://eu.api.blizzard.com/data/wow/mount/index?namespace=static-eu&locale=en_GB&access_token=" + token;
+    public void getAllBattlePets() {
+        String url = "https://eu.api.blizzard.com/data/wow/pet/index?namespace=static-eu&locale=en_GB&access_token=" + token;
 
         try {
             CloseableHttpClient httpClient = HttpClients.createDefault();
-            HttpGet request = new HttpGet(auctionUrl);
+            HttpGet request = new HttpGet(url);
             request.setHeader("Authorization", "Bearer " + token);
+
             CloseableHttpResponse response = httpClient.execute(request);
             System.out.println(response.getStatusLine().getStatusCode());
+
             if (response.getStatusLine().getStatusCode() != 404) {
                 String result = EntityUtils.toString(response.getEntity());
 
-                if (result != null || !result.isEmpty()) {
+                if (result != null && !result.isEmpty()) {
                     ObjectMapper objectMapper = new ObjectMapper();
                     objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-                    Mounts mounts = objectMapper.readValue(result, Mounts.class);
+                    Pets pets = objectMapper.readValue(result, Pets.class);
 
-                    for(Mount mountTemp : mounts.mounts) {
-                        List<entity.Item> items = itemService.getByNameContaining(mountTemp.name.toLowerCase());
+                    // Loop through each mount
+                    for (Pet petTemp : pets.pets) {
+                        // Try to find items that contain the mount name
+                        List<entity.Item> items = itemService.getByNameContaining(petTemp.name.toLowerCase());
 
-                        if(items != null && items.size() > 0) {
-                            entity.Mount mountTest = mountService.getById(items.get(0).getId());
-                            if (mountTest == null) {
-
-                                entity.Mount mount = new entity.Mount();
-
-                                mount.setId(items.get(0).getId());
-                                mount.setName(mountTemp.name);
-
-                                mountService.save(mount);
+                        if (items != null && items.size() > 0) {
+                            // If we haven't already saved this mount, do it
+                            entity.BattlePet existing = battlePetService.getById(items.get(0).getId());
+                            if (existing == null) {
+                                BattlePet battlePet = new BattlePet();
+                                battlePet.setId(items.get(0).getId());
+                                battlePet.setName(petTemp.name);
+                                battlePetService.save(battlePet);
                             }
                         }
                     }
@@ -128,6 +131,7 @@ public class UpdateDB {
             ex.printStackTrace();
         }
     }
+
 
 
 
@@ -319,4 +323,23 @@ Root root = om.readValue(myJsonString, Root.class); */
         public ArrayList<Mount> mounts;
     }
 
+    //===================================================================================================================================
+    // Battle Pets
+
+    // import com.fasterxml.jackson.databind.ObjectMapper; // version 2.11.1
+// import com.fasterxml.jackson.annotation.JsonProperty; // version 2.11.1
+/* ObjectMapper om = new ObjectMapper();
+Root root = om.readValue(myJsonString, Root.class); */
+
+
+    public static class Pet{
+        public Key key;
+        public String name;
+        public int id;
+    }
+
+    public static class Pets{
+        public Links _links;
+        public ArrayList<Pet> pets;
+    }
 }
