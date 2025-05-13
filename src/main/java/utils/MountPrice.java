@@ -1,10 +1,27 @@
 package utils;
 
-import entity.Realm;
-
 public class MountPrice {
     private int id;
-    private long price;
     private String name;
-    private Realm realm;
+
+    public MountPrice(int id, String name) {
+        this.id = id;
+        this.name = name;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
 }
