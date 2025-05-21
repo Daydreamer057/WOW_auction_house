@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import entity.*;
+import entity.Currency;
 import jakarta.annotation.PostConstruct;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -22,10 +23,7 @@ import service.*;
 import utils.MountPrice;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.Base64;
-import java.util.Comparator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -35,7 +33,7 @@ public class UpdateDB {
 
     private static final Logger log = LoggerFactory.getLogger(UpdateDB.class);
 
-    private static double compteurPrice = 0;
+    private static int compteurPrice = 0;
 
     // Injects mountService
     private final MountService mountService;
@@ -106,50 +104,57 @@ public class UpdateDB {
         List<BattlePet> battlePetList = battlePetService.getAll();
         List<entity.Realm> realmList = realmService.getAll();
 
-        ArrayList<MountPrice> listItemCheck = new ArrayList<>();
-        battlePetList.forEach(i -> listItemCheck.add(new MountPrice(i.getId(), i.getName())));
-        mountList.forEach(m -> listItemCheck.add(new MountPrice(m.getId(), m.getName())));
+        Map<Integer, MountPrice> itemMap = new HashMap<>();
+        battlePetList.forEach(i -> itemMap.put(i.getId(), new MountPrice(i.getId(), i.getName())));
+        mountList.forEach(m -> itemMap.put(m.getId(), new MountPrice(m.getId(), m.getName())));
 
-        ExecutorService executor = Executors.newFixedThreadPool(10); // Tune thread count
-
+        ExecutorService executor = Executors.newFixedThreadPool(10);
         ObjectMapper mapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
         CloseableHttpClient httpClient = HttpClients.createDefault();
 
+        for (Realm realm : realmList) {
+            executor.submit(() -> {
+                compteurPrice++;
+                System.out.println("Compteur price: " + compteurPrice + "/ " + realmList.size());
+                try {
+                    String url = "https://eu.api.blizzard.com/data/wow/connected-realm/" +
+                            realm.getId() + "/auctions?namespace=dynamic-eu&locale=en_GB&access_token=" + token;
 
-        for (MountPrice mount : listItemCheck) {
-            for (Realm realm : realmList) {
-                executor.submit(() -> {
-                    compteurPrice++;
-                    System.out.println("Compteur " + compteurPrice / 66);
-                    try {
-                        String url = "https://eu.api.blizzard.com/data/wow/connected-realm/" +
-                                realm.getId() + "/auctions?namespace=dynamic-eu&locale=en_GB&access_token=" + token;
+                    HttpGet request = new HttpGet(url);
+                    request.setHeader("Authorization", "Bearer " + token);
+                    CloseableHttpResponse response = httpClient.execute(request);
 
-                        HttpGet request = new HttpGet(url);
-                        request.setHeader("Authorization", "Bearer " + token);
+                    if (response.getStatusLine().getStatusCode() != 404) {
+                        String result = EntityUtils.toString(response.getEntity());
+                        if (result != null && !result.isEmpty()) {
+                            Auctions auctions = mapper.readValue(result, Auctions.class);
 
-                        CloseableHttpResponse response = httpClient.execute(request);
-                        if (response.getStatusLine().getStatusCode() != 404) {
-                            String result = EntityUtils.toString(response.getEntity());
+                            Map<Integer, Auction> cheapestMap = new HashMap<>();
+                            for (Auction auction : auctions.auctions) {
+                                int itemId = auction.item.id;
+                                if (!cheapestMap.containsKey(itemId) || auction.buyout < cheapestMap.get(itemId).buyout) {
+                                    cheapestMap.put(itemId, auction);
+                                }
+                            }
 
-                            if (result != null && !result.isEmpty()) {
-                                Auctions auctions = mapper.readValue(result, Auctions.class);
-                                Auction cheapest = auctions.auctions.stream()
-                                        .min(Comparator.comparingLong(a -> a.buyout))
-                                        .orElse(null);
+                            for (Map.Entry<Integer, Auction> entry : cheapestMap.entrySet()) {
+                                int itemId = entry.getKey();
+                                Auction cheapest = entry.getValue();
 
-                                if (cheapest != null) {
-                                    CurrencyId currencyId = new CurrencyId(mount.getId(), realm.getId());
+                                if (itemMap.containsKey(itemId)) {
+                                    CurrencyId currencyId = new CurrencyId(itemId, realm.getId());
                                     Currency currency = currencyService.getById(currencyId);
 
                                     if (currency == null) {
-                                        currency = new Currency();
-                                        currency.setId(currencyId);
-                                        currency.setItem(itemService.getById(mount.getId()));
-                                        currency.setCost(BigDecimal.valueOf(cheapest.buyout));
-                                        currency.setRealm(realm);
-
-                                        currencyService.save(currency);
+                                        Item item = itemService.getById(itemId);
+                                        if (item != null) {
+                                            currency = new Currency();
+                                            currency.setId(currencyId);
+                                            currency.setItem(item);
+                                            currency.setCost(BigDecimal.valueOf(cheapest.buyout));
+                                            currency.setRealm(realm);
+                                            currencyService.save(currency);
+                                        }
                                     } else {
                                         if (currency.getCost().compareTo(BigDecimal.valueOf(cheapest.buyout)) != 0) {
                                             currency.setCost(BigDecimal.valueOf(cheapest.buyout));
@@ -159,11 +164,11 @@ public class UpdateDB {
                                 }
                             }
                         }
-                    } catch (Exception e) {
-                        e.printStackTrace();
                     }
-                });
-            }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
         }
 
         executor.shutdown();
@@ -172,9 +177,8 @@ public class UpdateDB {
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-
-
     }
+
 
     public void getAllItem() {
         List<Item> items = itemService.getAll();
@@ -211,10 +215,6 @@ public class UpdateDB {
                             if(battlePetEntity!=null) {
                                 battlePetService.delete(battlePetEntity);
                             }
-                            Item itemEntity = itemService.getById(mount.getId());
-                            if(itemEntity!=null) {
-                                itemService.delete(itemEntity);
-                            }
                         }
                     }
                 }
@@ -233,10 +233,11 @@ Root root = om.readValue(myJsonString, Root.class); */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Auction{
         public int id;
-        public ItemInnerClass itemInnerClass;
+        public ItemInnerClass item;
         public long buyout;
         public int quantity;
         public String time_left;
+        public long bid;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -250,15 +251,15 @@ Root root = om.readValue(myJsonString, Root.class); */
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ItemInnerClass {
+    public static class ItemInnerClass{
         public int id;
-        public ArrayList<Integer> bonus_lists;
         public ArrayList<Modifier> modifiers;
-        public int context;
         public int pet_breed_id;
         public int pet_level;
         public int pet_quality_id;
         public int pet_species_id;
+        public int context;
+        public ArrayList<Integer> bonus_lists;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -269,7 +270,7 @@ Root root = om.readValue(myJsonString, Root.class); */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Modifier{
         public int type;
-        public int value;
+        public long value;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -280,9 +281,12 @@ Root root = om.readValue(myJsonString, Root.class); */
         public Commodities commodities;
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Self{
         public String href;
     }
+
+
 
     //==================================================================================================================================================
     // Realms
