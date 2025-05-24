@@ -25,7 +25,6 @@ import service.ItemService;
 import service.RealmService;
 import utils.MappedAuctions;
 import utils.MappedItems;
-import utils.MappedRealm;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -34,8 +33,6 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-
-import static java.util.stream.StreamSupport.stream;
 
 @Component // Marks this class as a Spring-managed component
 public class UpdateDB {
@@ -102,7 +99,7 @@ public class UpdateDB {
     }
 
     public void saveAllItem() {
-        System.out.println("Begin Search Items "+System.currentTimeMillis());
+        System.out.println("Begin Search Items " + System.currentTimeMillis());
         final int THREAD_COUNT = 20;
         final int BATCH_SIZE = 50;
 
@@ -120,7 +117,7 @@ public class UpdateDB {
 
             br.close();
             fr.close();
-        }catch (Exception e){
+        } catch (Exception e) {
             e.printStackTrace();
         }
 
@@ -265,3 +262,4 @@ public class UpdateDB {
             });
         }
     }
+}
