@@ -23,6 +23,8 @@ import service.RealmService;
 import utils.ItemSell;
 import utils.MappedItems;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.PrintWriter;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -95,8 +97,6 @@ public class UpdateDB {
 
     public void saveAllItem() {
         System.out.println("Begin Search Items "+System.currentTimeMillis());
-        final int start = 25;
-        final int end = 3000000;
         final int THREAD_COUNT = 20;
         final int BATCH_SIZE = 50;
 
@@ -105,70 +105,88 @@ public class UpdateDB {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-        for (int i = start; i < end; i++) {
-            final int itemId = i;
+        String listId = "";
+        try {
+            FileReader fr = new FileReader("e://listes/mounts.txt");
+            BufferedReader br = new BufferedReader(fr);
 
-            executor.submit(() -> {
-                List<Item> batch = new ArrayList<>();
+            listId = br.readLine();
 
-                try {
-                    String auctionUrl = "https://eu.api.blizzard.com/data/wow/item/" + itemId +
-                            "?namespace=static-eu&access_token=" + token;
+            br.close();
+            fr.close();
+        }catch (Exception e){
+            e.printStackTrace();
+        }
 
-                    HttpGet request = new HttpGet(auctionUrl);
-                    request.setHeader("Authorization", "Bearer " + token);
+        String[] ids = listId.split(",");
 
-                    try (CloseableHttpResponse response = httpClient.execute(request)) {
-                        int status = response.getStatusLine().getStatusCode();
+        for (String idTemp : ids) {
+            int i = Integer.parseInt(idTemp);
+            List<Item> items = itemService.getByItemId(i);
+            if (items == null || items.isEmpty() || items.size() < 7) {
+                final int itemId = i;
 
-                        if (status == 404) return;
+                executor.submit(() -> {
+                    List<Item> batch = new ArrayList<>();
 
-                        String result = EntityUtils.toString(response.getEntity());
-                        if (result == null || result.isEmpty()) return;
+                    try {
+                        String auctionUrl = "https://eu.api.blizzard.com/data/wow/item/" + itemId +
+                                "?namespace=static-eu&access_token=" + token;
 
-                        MappedItems.Root root = objectMapper.readValue(result, MappedItems.Root.class);
+                        HttpGet request = new HttpGet(auctionUrl);
+                        request.setHeader("Authorization", "Bearer " + token);
 
-                        Map<String, String> nameMap = Map.of(
-                                "pt_BR", root.name.pt_BR,
-                                "de_DE", root.name.de_DE,
-                                "en_GB", root.name.en_GB,
-                                "es_ES", root.name.es_ES,
-                                "fr_FR", root.name.fr_FR,
-                                "it_IT", root.name.it_IT,
-                                "ru_RU", root.name.ru_RU
-                        );
+                        try (CloseableHttpResponse response = httpClient.execute(request)) {
+                            int status = response.getStatusLine().getStatusCode();
 
-                        for (Map.Entry<String, String> entry : nameMap.entrySet()) {
-                            String locale = entry.getKey();
-                            String name = entry.getValue();
+                            if (status == 404) return;
+
+                            String result = EntityUtils.toString(response.getEntity());
+                            if (result == null || result.isEmpty()) return;
+
+                            MappedItems.Root root = objectMapper.readValue(result, MappedItems.Root.class);
+
+                            Map<String, String> nameMap = Map.of(
+                                    "pt_BR", root.name.pt_BR,
+                                    "de_DE", root.name.de_DE,
+                                    "en_GB", root.name.en_GB,
+                                    "es_ES", root.name.es_ES,
+                                    "fr_FR", root.name.fr_FR,
+                                    "it_IT", root.name.it_IT,
+                                    "ru_RU", root.name.ru_RU
+                            );
+
+                            for (Map.Entry<String, String> entry : nameMap.entrySet()) {
+                                String locale = entry.getKey();
+                                String name = entry.getValue();
 //                            System.out.println("Running in thread: " + Thread.currentThread().getName());
-                            if (itemService.getByItemId(root.id) == null) {
+
                                 Item item = new Item();
                                 item.setItemId(root.id);
                                 item.setName(name);
                                 item.setLocale(locale);
                                 item.setCurrencies(new HashSet<>());
                                 batch.add(item);
+
+                                if (batch.size() >= BATCH_SIZE) {
+                                    itemService.batchInsertItems(batch);
+                                    batch.clear();
+                                }
                             }
 
-                            if (batch.size() >= BATCH_SIZE) {
-                                System.out.println("Batch save "+batch.size());
+                            // Save remaining
+                            if (!batch.isEmpty()) {
                                 itemService.batchInsertItems(batch);
-                                batch.clear();
                             }
+                        } catch (Exception e) {
+                            System.err.println("Failed item ID: " + itemId);
+                            e.printStackTrace();
                         }
-
-                        // Save remaining
-                        if (!batch.isEmpty()) {
-                            System.out.println("Batch save "+batch.size());
-                            itemService.batchInsertItems(batch);
-                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
-                } catch (Exception e) {
-                    System.err.println("Failed item ID: " + itemId);
-                    e.printStackTrace();
-                }
-            });
+                });
+            }
         }
 
         executor.shutdown();
@@ -178,7 +196,6 @@ public class UpdateDB {
             executor.shutdownNow();
         }
     }
-
 
     public void printResults(List<ItemSell> itemSellList){
         try {
