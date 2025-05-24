@@ -2,7 +2,10 @@ package application;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import entity.Currency;
+import entity.CurrencyId;
 import entity.Item;
+import entity.Realm;
 import jakarta.annotation.PostConstruct;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -20,16 +23,19 @@ import org.springframework.stereotype.Component;
 import service.CurrencyService;
 import service.ItemService;
 import service.RealmService;
-import utils.ItemSell;
+import utils.MappedAuctions;
 import utils.MappedItems;
+import utils.MappedRealm;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.io.PrintWriter;
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+
+import static java.util.stream.StreamSupport.stream;
 
 @Component // Marks this class as a Spring-managed component
 public class UpdateDB {
@@ -166,6 +172,8 @@ public class UpdateDB {
                                 item.setName(name);
                                 item.setLocale(locale);
                                 item.setCurrencies(new HashSet<>());
+                                item.setItemClass(root.item_class.name.en_GB);
+
                                 batch.add(item);
 
                                 if (batch.size() >= BATCH_SIZE) {
@@ -197,19 +205,63 @@ public class UpdateDB {
         }
     }
 
-    public void printResults(List<ItemSell> itemSellList){
-        try {
-            PrintWriter pw = new PrintWriter("e://temp/List_Wow_CrossRealm.txt");
+    public void getAllPrices() {
+        List<entity.Realm> realmList = realmService.getAll();
+//        List<entity.Item> itemList = itemService.getAll();
 
-            for(ItemSell itemSell : itemSellList){
-                pw.println("");
-            }
+        ArrayList<Currency> listItemCheck = new ArrayList<>();
+//        currencyList.sort((c1, c2) -> c2.getCost().compareTo(c1.getCost()));
 
-            pw.flush();
-            pw.close();
-        } catch (Exception ex){
-            ex.printStackTrace();
+        ExecutorService executor = Executors.newFixedThreadPool(10); // Tune thread count
+
+        ObjectMapper mapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        CloseableHttpClient httpClient = HttpClients.createDefault();
+
+        for (Realm realmTemp : realmList) {
+            executor.submit(() -> {
+                compteurPrice++;
+                System.out.println("Compteur " + compteurPrice);
+                try {
+                    String url = "https://eu.api.blizzard.com/data/wow/connected-realm/" +
+                            realmTemp.getId() + "/auctions?namespace=dynamic-eu&locale=en_GB&access_token=" + token;
+
+                    HttpGet request = new HttpGet(url);
+                    request.setHeader("Authorization", "Bearer " + token);
+
+                    CloseableHttpResponse response = httpClient.execute(request);
+                    if (response.getStatusLine().getStatusCode() != 404) {
+                        String result = EntityUtils.toString(response.getEntity());
+
+                        if (result != null && !result.isEmpty()) {
+                            MappedAuctions.Auctions auctions = mapper.readValue(result, MappedAuctions.Auctions.class);
+                            MappedAuctions.Auction cheapest = auctions.auctions.stream()
+                                    .min(Comparator.comparingLong(a -> a.buyout))
+                                    .orElse(null);
+
+                            if (cheapest != null) {
+                                CurrencyId currencyId = new CurrencyId(cheapest.item.id, realmTemp.getId());
+                                entity.Currency currency = currencyService.getById(currencyId);
+
+                                if (currency == null) {
+                                    currency = new Currency();
+                                    currency.setId(currencyId);
+                                    currency.setItem(itemService.getByItemId(cheapest.item.id).get(0));
+                                    currency.setCost(BigDecimal.valueOf(cheapest.buyout));
+                                    currency.setRealm(realmTemp);
+
+                                    currencyService.save(currency);
+                                } else {
+                                    if (currency.getCost().compareTo(BigDecimal.valueOf(cheapest.buyout)) != 0) {
+                                        currency.setCost(BigDecimal.valueOf(cheapest.buyout));
+                                        currencyService.save(currency);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
         }
-
     }
-}
