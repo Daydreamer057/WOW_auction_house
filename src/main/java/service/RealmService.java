@@ -21,6 +21,10 @@ public class RealmService {
         return realmRepository.findAll();
     }
 
+    public List<Realm> getDistinctConnectedRealms() {
+        return realmRepository.findDistinctConnectedRealms();
+    }
+
     public Realm getById(int id) {
         return realmRepository.findById(id).orElse(null);
     }

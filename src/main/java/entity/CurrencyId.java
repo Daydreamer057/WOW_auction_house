@@ -34,6 +34,6 @@ public class CurrencyId implements Serializable {
 
     @Override
     public int hashCode() {
-        return Objects.hash(itemId, realmId);
+        return Objects.hash((Object)itemId, (Object)realmId);
     }
 }

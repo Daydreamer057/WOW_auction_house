@@ -17,20 +17,16 @@ public class ItemService {
         return itemRepository.save(item);
     }
 
+    public void saveAll(List<Item> items) {
+        itemRepository.saveAll(items);
+    }
+
     public List<Item> getAll() {
         return itemRepository.findAll();
     }
 
     public Item getById(int id) {
-        return itemRepository.findById(id).orElse(null);
-    }
-
-    public Item getByName(String name) {
-        return itemRepository.findByNameIgnoreCase(name).orElse(null);
-    }
-
-    public List<Item> getByNameContaining(String name) {
-        return itemRepository.findByNameContainingIgnoreCase(name);
+        return itemRepository.findById(id);
     }
 
     public void delete(Item item) {
