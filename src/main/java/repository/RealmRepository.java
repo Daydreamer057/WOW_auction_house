@@ -21,4 +21,6 @@ public interface RealmRepository extends JpaRepository<Realm, Integer> {
 """, nativeQuery = true)
     List<Realm> findDistinctConnectedRealms();
 
+    Realm getByConnectedRealmId(int ConnectedRealmId);
+
 }

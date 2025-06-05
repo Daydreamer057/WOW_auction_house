@@ -29,6 +29,10 @@ public class RealmService {
         return realmRepository.findById(id).orElse(null);
     }
 
+    public Realm getByConnectedRealmId(int connectedRealmId) {
+        return realmRepository.findById(connectedRealmId).orElse(null);
+    }
+
     public void delete(Realm realm) {
         realmRepository.delete(realm);
     }

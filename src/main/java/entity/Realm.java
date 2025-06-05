@@ -27,6 +27,9 @@ public class Realm implements Serializable {
     @Column(name ="locale")
     private String locale;
 
+    @Column(name ="population type")
+    private String populationType;
+
     @Column(name ="connected_realm_id")
     private int connectedRealmId;
 
@@ -71,5 +74,13 @@ public class Realm implements Serializable {
 
     public void setCurrencies(Set<Currency> currencies) {
         this.currencies = currencies;
+    }
+
+    public String getPopulationType() {
+        return populationType;
+    }
+
+    public void setPopulationType(String populationType) {
+        this.populationType = populationType;
     }
 }

@@ -24,10 +24,16 @@ import service.CurrencyService;
 import service.ItemService;
 import service.RealmService;
 import utils.MappedAuctions;
+import utils.MappedConnectedRealm;
 import utils.MappedItems;
+import utils.MappedRealm;
 
-import java.io.*;
-import java.util.*;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.util.Base64;
+import java.util.HashSet;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -63,6 +69,7 @@ public class UpdateDB {
         System.out.println("Starting application.UpdateDB...");
         this.token = getAccessToken(); // Retrieve access token when Spring initializes the bean
         long begin = System.currentTimeMillis();
+//        saveAllItem();
         getAllPrices();
         long end = System.currentTimeMillis();
         System.out.println("Time " + (end - begin) / 60000);
@@ -114,7 +121,7 @@ public class UpdateDB {
         String[] ids = listId.split(",");
 
         for (String idTemp : ids) {
-            int i = Integer.parseInt(idTemp);
+            int i = Integer.parseInt(idTemp.trim());
             Item item = itemService.getById(i);
             if (item == null) {
                 try {
@@ -197,13 +204,13 @@ public class UpdateDB {
                                 currency = new Currency();
                                 currency.setId(currencyId);
                                 currency.setItem(item);
-                                currency.setCost(auction.buyout);
+                                currency.setCost(Long.valueOf(auction.buyout));
                                 currency.setRealm(realm);
 
                                 currencyService.save(currency);
                             } else {
-                                if(currency.getCost().equals(auction.buyout)) {
-                                    currency.setCost(auction.buyout);
+                                if(currency.getCost().equals(Long.valueOf(auction.buyout))) {
+                                    currency.setCost(Long.valueOf(auction.buyout));
 
                                     currencyService.save(currency);
                                 }
@@ -215,6 +222,107 @@ public class UpdateDB {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    public void saveRealms(){
+        try {
+            String auctionUrl = "https://eu.api.blizzard.com/data/wow/connected-realm/index?namespace=dynamic-eu&access_token=" + token;
+            CloseableHttpClient httpClient = HttpClients.createDefault();
+            HttpGet request = new HttpGet(auctionUrl);
+            request.setHeader("Authorization", "Bearer " + token);
+            CloseableHttpResponse response = httpClient.execute(request);
+            System.out.println(response.getStatusLine().getStatusCode());
+            if (response.getStatusLine().getStatusCode() != 404) {
+                String result = EntityUtils.toString(response.getEntity());
+
+                if (result != null || !result.isEmpty()) {
+                    ObjectMapper objectMapper = new ObjectMapper();
+                    objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+                    MappedConnectedRealm.ConnectedRealms connectedRealms = objectMapper.readValue(result, MappedConnectedRealm.ConnectedRealms.class);
+
+                    for(MappedConnectedRealm.ConnectedRealm connectedRealm : connectedRealms.connected_realms) {
+                        auctionUrl = connectedRealm.href + "&access_token=" + token;
+                        httpClient = HttpClients.createDefault();
+                        request = new HttpGet(auctionUrl);
+                        request.setHeader("Authorization", "Bearer " + token);
+                        response = httpClient.execute(request);
+                        System.out.println(response.getStatusLine().getStatusCode());
+                        if (response.getStatusLine().getStatusCode() != 404) {
+                            result = EntityUtils.toString(response.getEntity());
+
+                            if (result != null || !result.isEmpty()) {
+                                objectMapper = new ObjectMapper();
+                                objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+                                MappedRealm.Root realmRoot = objectMapper.readValue(result, MappedRealm.Root.class);
+
+                                MappedRealm.Realm realm = realmRoot.realms.get(0);
+
+
+                                int realmId = Integer.parseInt(realm.connected_realm.href.substring(realm.connected_realm.href.lastIndexOf("/") + 1, realm.connected_realm.href.lastIndexOf("?")));
+                                String realmLocale = realm.locale;
+                                String realmName = "";
+
+                                switch (realmLocale) {
+
+                                    case "ptBR":
+                                        realmName = realm.name.pt_BR;
+                                        break;
+
+                                    case "deDE":
+                                        realmName = realm.name.de_DE;
+                                        break;
+
+                                    case "enGB":
+                                        realmName = realm.name.en_GB;
+                                        break;
+
+                                    case "esES":
+                                        realmName = realm.name.es_ES;
+                                        break;
+
+                                    case "frFR":
+                                        realmName = realm.name.fr_FR;
+                                        break;
+
+                                    case "itIT":
+                                        realmName = realm.name.it_IT;
+                                        break;
+
+                                    case "ruRU":
+                                        realmName = realm.name.ru_RU;
+                                        break;
+
+                                    default:
+                                        realmName = realm.name.en_GB;
+                                        break;
+                                }
+
+//                                System.out.println("Realm id "+realm.id+"    connectedId "+realmId+"    population "+populationType);
+
+                                Realm realmEntity = realmService.getByConnectedRealmId(realmId);
+                                if (realmEntity == null) {
+                                    realmEntity = new Realm();
+                                    realmEntity.setId(realm.id);
+                                    realmEntity.setCurrencies(new HashSet<>()); // initialize if new
+                                    realmEntity.setLocale(realm.locale.substring(0, 2) + "_" + realm.locale.substring(2, 4));
+                                    realmEntity.setName(realmName);
+                                    realmEntity.setConnectedRealmId(realmId);
+                                    realmEntity.setPopulationType(realmRoot.population.type);
+
+                                    realmService.save(realmEntity);
+                                }
+                            }
+                        }
+                        response.close();
+                        httpClient.close();
+                    }
+                }
+            }
+        } catch (Exception ex){
+            ex.printStackTrace();
         }
     }
 
