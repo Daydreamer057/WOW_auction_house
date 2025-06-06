@@ -13,6 +13,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -30,12 +31,11 @@ import utils.MappedRealm;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
-import java.util.Base64;
-import java.util.HashSet;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Component // Marks this class as a Spring-managed component
 public class UpdateDB {
@@ -173,57 +173,81 @@ public class UpdateDB {
     public void getAllPrices() {
         List<Realm> realmList = realmService.getDistinctConnectedRealms();
         List<Item> itemList = itemService.getAll();
-        ExecutorService executor = Executors.newFixedThreadPool(10);
+
+        // Use Map for O(1) item lookup
+        Map<Integer, Item> itemMap = itemList.stream()
+                .collect(Collectors.toMap(Item::getId, Function.identity()));
+
         ObjectMapper mapper = new ObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-        CloseableHttpClient httpClient = HttpClients.createDefault();
 
-        int compteur = 0;
+        // Efficient HTTP client with connection pooling
+        PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
+        cm.setMaxTotal(50);
+        cm.setDefaultMaxPerRoute(10);
+        CloseableHttpClient httpClient = HttpClients.custom().setConnectionManager(cm).build();
+
+        ExecutorService executor = Executors.newFixedThreadPool(10); // or dynamically tuned
+
+        int compteurRealm = 0;
         for (Realm realm : realmList) {
-            try {
-                String url = "https://eu.api.blizzard.com/data/wow/connected-realm/" +
-                        realm.getConnectedRealmId() + "/auctions?namespace=dynamic-eu&locale=en_GB&access_token=" + token;
+            executor.submit(() -> {
+                try {
+                    System.out.println("realm "+realm.getConnectedRealmId());
+                    String url = "https://eu.api.blizzard.com/data/wow/connected-realm/" +
+                            realm.getConnectedRealmId() + "/auctions?namespace=dynamic-eu&locale=en_GB&access_token=" + token;
 
-                HttpGet request = new HttpGet(url);
-                request.setHeader("Authorization", "Bearer " + token);
+                    HttpGet request = new HttpGet(url);
+                    request.setHeader("Authorization", "Bearer " + token);
 
-                try (CloseableHttpResponse response = httpClient.execute(request)) {
-                    if (response.getStatusLine().getStatusCode() == 404) return;
+                    try (CloseableHttpResponse response = httpClient.execute(request)) {
+                        if (response.getStatusLine().getStatusCode() != 404) {
 
-                    String result = EntityUtils.toString(response.getEntity());
-                    if (result == null || result.isEmpty()) return;
+                            String result = EntityUtils.toString(response.getEntity());
+                            if (result != null && !result.isEmpty()) {
 
-                    MappedAuctions.Auctions auctions = mapper.readValue(result, MappedAuctions.Auctions.class);
+                                MappedAuctions.Auctions auctions = mapper.readValue(result, MappedAuctions.Auctions.class);
 
-                    for (MappedAuctions.Auction auction : auctions.auctions) {
-                        Item item = getItemById(itemList, auction.item.id);
-                        if (item != null) {
-                            CurrencyId currencyId = new CurrencyId(item.getId(), realm.getId());
-                            Currency currency = currencyService.getById(currencyId);
+                                for (MappedAuctions.Auction auction : auctions.auctions) {
+                                    Item item = itemMap.get(auction.item.id);
+                                    if (item != null) {
+                                        CurrencyId currencyId = new CurrencyId(item.getId(), realm.getId());
+                                        Currency currency = currencyService.getById(currencyId);
 
-                            if (currency == null) {
-                                currency = new Currency();
-                                currency.setId(currencyId);
-                                currency.setItem(item);
-                                currency.setCost(Long.valueOf(auction.buyout));
-                                currency.setRealm(realm);
-
-                                currencyService.save(currency);
-                            } else {
-                                if(currency.getCost().equals(Long.valueOf(auction.buyout))) {
-                                    currency.setCost(Long.valueOf(auction.buyout));
-
-                                    currencyService.save(currency);
+                                        long buyout = auction.buyout;
+                                        if (currency == null) {
+                                            currency = new Currency();
+                                            currency.setId(currencyId);
+                                            currency.setItem(item);
+                                            currency.setRealm(realm);
+                                            currency.setCost(buyout);
+                                            currencyService.save(currency);
+                                        } else if (!currency.getCost().equals(buyout)) {
+                                            currency.setCost(buyout);
+                                            currencyService.save(currency);
+                                        }
+                                    }
                                 }
                             }
                         }
-                        System.out.println("Compteur "+compteur++);
                     }
+                } catch (Exception e) {
+                    log.error("Error processing realm " + realm.getConnectedRealmId(), e);
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
+            });
+        }
+
+        executor.shutdown();
+
+        while(!executor.isTerminated()){
+            try {
+                Thread.sleep(1000);
+            } catch (Exception e){
+
             }
         }
+        System.out.println("End Search Items " + System.currentTimeMillis());
     }
+
 
     public void saveRealms(){
         try {
